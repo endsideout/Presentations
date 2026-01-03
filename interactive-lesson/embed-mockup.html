@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thinkific Embed Mockup</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Navigation Bar */
+        .navbar {
+            height: 60px;
+            background-color: #0d1117;
+            /* Dark header like screenshot */
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-weight: bold;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 60px);
+            overflow: hidden;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 300px;
+            background-color: #fcfcfc;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background-color: #A8CF5A;
+            /* Light green like screenshot */
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .lesson-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .lesson-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #555;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .lesson-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .lesson-item.active {
+            background-color: #e6f0e6;
+            border-left: 4px solid #A8CF5A;
+            font-weight: 500;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            flex: 1;
+            background-color: #F7D7D3;
+            /* Matching app bg or generic gray */
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .course-title {
+            width: 100%;
+            max-width: 1280px;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* The Embed Wrapper */
+        .embed-container {
+            width: 100%;
+            max-width: 100%;
+            /* 
+               This container simulates the iframe provided by the LMS.
+               Often they are set to 16:9 or responsive width.
+            */
+            aspect-ratio: 16/9;
+            background: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Footer buttons similar to screenshot */
+        .footer-controls {
+            width: 100%;
+            max-width: 1280px;
+            margin-top: 20px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn-continue {
+            background-color: #A8CF5A;
+            color: black;
+            border: none;
+            padding: 12px 24px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="navbar">
+        <span>KnowYourHealth.endsideout.org</span>
+    </div>
+
+    <div class="container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                EndSideOut<br>
+                <span style="font-size: 0.8em; font-weight: normal;">Gamification Essentials</span>
+            </div>
+            <ul class="lesson-list">
+                <li class="lesson-item">○ Introduction</li>
+                <li class="lesson-item">○ Understanding Nutrients</li>
+                <li class="lesson-item active">● INTERACTIVE LESSON</li>
+                <li class="lesson-item">○ Quiz</li>
+                <li class="lesson-item">○ Summary</li>
+            </ul>
+        </div>
+
+        <!-- Main Player -->
+        <div class="main-content">
+            <div class="course-title">Interactive Lesson: Building a Healthy Plate</div>
+
+            <div class="embed-container">
+                <!-- Pointing to local dev server -->
+                <iframe src="http://localhost:3000" title="Interactive Lesson" allowfullscreen></iframe>
+            </div>
+
+            <div class="footer-controls">
+                <button class="btn-continue">COMPLETE & CONTINUE →</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

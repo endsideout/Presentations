@@ -1,0 +1,10 @@
+# Draft files - not for version control
+email-draft.txt
+gallery.html
+
+# PowerPoint files (large binary files)
+*.pptx
+
+# OS files
+.DS_Store
+
