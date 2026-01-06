@@ -18,6 +18,7 @@ import {
   onSnapshot,
   Unsubscribe,
 } from "firebase/firestore";
+import { useSearchParams } from "next/navigation";
 import type {
   StudentDocument,
   LocalProgress,
@@ -54,6 +55,10 @@ interface LessonContextType {
   syncError: string | null;
   /** Whether the browser is online */
   isOnline: boolean;
+  /** Active Module ID (optional) */
+  moduleId?: string;
+  /** Full progress map for all modules */
+  allProgress: Record<string, { completedSlides: number[], currentSlide: number }>;
 }
 
 const LessonContext = createContext<LessonContextType | undefined>(undefined);
@@ -112,13 +117,22 @@ function getInitialEmail(): string | null {
 /**
  * Initialize progress from localStorage (runs only on client)
  */
-function getInitialProgress(): { slides: number[]; slide: number } {
+function getInitialProgress(moduleId?: string): { slides: number[]; slide: number } {
   if (typeof window === "undefined") return { slides: [], slide: 1 };
 
   const email = localStorage.getItem(STORAGE_KEYS.EMAIL);
   if (!email) return { slides: [], slide: 1 };
 
   const progress = loadLocalProgress(email);
+  
+  if (moduleId && progress?.progress?.[moduleId]) {
+      return {
+          slides: progress.progress[moduleId].completedSlides || [],
+          slide: progress.progress[moduleId].currentSlide || 1,
+      };
+  }
+  
+  // Fallback to legacy root fields
   return {
     slides: progress?.completedSlides || [],
     slide: progress?.currentSlide || 1,
@@ -140,14 +154,24 @@ function generateRetryId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-export function LessonProvider({ children }: { children: ReactNode }) {
+export function LessonProvider({ 
+  children,
+  moduleId 
+}: { 
+  children: ReactNode;
+  moduleId?: string;
+}) {
   // Use lazy initializers to avoid setState in effects
   const [studentEmail, setStudentState] = useState<string | null>(
     getInitialEmail
   );
+  
+  // Re-initialize check needed if moduleId changes dynamically, but typically it won't within one tree mount
   const [completedSlides, setCompletedSlides] = useState<number[]>(
-    () => getInitialProgress().slides
+    () => getInitialProgress(moduleId).slides
   );
+  const [allProgress, setAllProgress] = useState<Record<string, any>>({});
+  
   const [loading, setLoading] = useState(() => Boolean(getInitialEmail()));
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -164,6 +188,29 @@ export function LessonProvider({ children }: { children: ReactNode }) {
   // Retry queue for failed writes
   const retryQueueRef = useRef<RetryQueueItem[]>([]);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // URL Auth Integration
+  const searchParams = useSearchParams();
+
+  // Check for email in URL on mount/update
+  useEffect(() => {
+    if (!searchParams) return;
+    
+    // Support "email" or "student_email" param
+    const emailParam =
+      searchParams.get("email") || searchParams.get("student_email");
+
+    if (emailParam && emailParam.includes("@")) {
+      // If we have a valid email in URL, override/set current session
+      // Only set if different to avoid loops
+      if (emailParam !== studentEmail) {
+        if (process.env.NODE_ENV === "development") {
+            console.log(`🔗 Detected email from URL: ${emailParam}`);
+        }
+        setStudentEmail(emailParam);
+      }
+    }
+  }, [searchParams, studentEmail]); // Dependencies correct
 
   /**
    * Load retry queue from localStorage
@@ -323,19 +370,45 @@ export function LessonProvider({ children }: { children: ReactNode }) {
         if (snapshot.exists()) {
           const data = snapshot.data();
           if (isStudentDocument(data)) {
-            const firestoreSlides = data.completedSlides || [];
-            const firestoreCurrentSlide = data.currentSlide;
+            let firestoreSlides: number[] = [];
+            let firestoreCurrentSlide: number | undefined;
+
+            // Update all progress map
+            if (data.progress) {
+                setAllProgress(data.progress);
+            }
+
+            if (moduleId && data.progress?.[moduleId]) {
+                // Read from module progress
+                firestoreSlides = data.progress[moduleId].completedSlides || [];
+                firestoreCurrentSlide = data.progress[moduleId].currentSlide;
+            } else if (!moduleId) {
+                // Read from legacy/root
+                firestoreSlides = data.completedSlides || [];
+                firestoreCurrentSlide = data.currentSlide;
+            }
 
             // Update React state from Firestore
             setCompletedSlides(firestoreSlides);
 
             // Sync Firestore → localStorage for offline consistency
-            saveLocalProgress({
-              email,
-              completedSlides: firestoreSlides,
-              currentSlide: firestoreCurrentSlide,
-              lastSyncedAt: new Date().toISOString(),
-            });
+            // We need to carefully update the local storage structure to match firestore
+            const currentLocal = loadLocalProgress(email) || { email, completedSlides: [], progress: {} };
+            
+            if (moduleId) {
+                if (!currentLocal.progress) currentLocal.progress = {};
+                currentLocal.progress[moduleId] = {
+                    completedSlides: firestoreSlides,
+                    currentSlide: firestoreCurrentSlide || 1,
+                    lastSyncedAt: new Date().toISOString()
+                };
+            } else {
+                currentLocal.completedSlides = firestoreSlides;
+                currentLocal.currentSlide = firestoreCurrentSlide;
+                currentLocal.lastSyncedAt = new Date().toISOString();
+            }
+            
+            saveLocalProgress(currentLocal);
 
             // Track last synced slide
             if (firestoreCurrentSlide !== undefined) {
@@ -344,7 +417,7 @@ export function LessonProvider({ children }: { children: ReactNode }) {
 
             if (process.env.NODE_ENV === "development") {
               console.log(
-                `🔄 Real-time sync: ${email} - ${firestoreSlides.length} slides completed`
+                `🔄 Real-time sync (${moduleId || 'root'}): ${email} - ${firestoreSlides.length} slides completed`
               );
             }
           }
@@ -364,7 +437,7 @@ export function LessonProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     );
-  }, []);
+  }, [moduleId]);
 
   /**
    * Write student data to Firestore using setDoc with merge
@@ -391,7 +464,6 @@ export function LessonProvider({ children }: { children: ReactNode }) {
         const docRef = doc(firebase.db, "students", email);
 
         // Use setDoc with merge: true to handle both create and update
-        // This is the key fix - avoids "document does not exist" errors
         await setDoc(
           docRef,
           {
@@ -510,7 +582,11 @@ export function LessonProvider({ children }: { children: ReactNode }) {
     // Load any existing local progress for this email
     const localProgress = loadLocalProgress(email);
     if (localProgress) {
-      setCompletedSlides(localProgress.completedSlides);
+        if (moduleId && localProgress.progress?.[moduleId]) {
+            setCompletedSlides(localProgress.progress[moduleId].completedSlides);
+        } else if (!moduleId) {
+            setCompletedSlides(localProgress.completedSlides);
+        }
     }
 
     // Initialize/update Firestore document (non-blocking)
@@ -532,16 +608,27 @@ export function LessonProvider({ children }: { children: ReactNode }) {
     lastSyncedSlideRef.current = slideNumber;
 
     // Update localStorage
-    const currentProgress = loadLocalProgress(studentEmail);
-    saveLocalProgress({
-      email: studentEmail,
-      completedSlides: currentProgress?.completedSlides || completedSlides,
-      currentSlide: slideNumber,
-      lastSyncedAt: currentProgress?.lastSyncedAt,
-    });
+    const currentProgress = loadLocalProgress(studentEmail) || { email: studentEmail, completedSlides: [] };
+    
+    if (moduleId) {
+        if (!currentProgress.progress) currentProgress.progress = {};
+        const modProgress = currentProgress.progress[moduleId] || { completedSlides: [], currentSlide: slideNumber };
+        modProgress.currentSlide = slideNumber;
+        currentProgress.progress[moduleId] = modProgress;
+    } else {
+        currentProgress.currentSlide = slideNumber;
+        // Ensure completedSlides defaults exist
+        if (!currentProgress.completedSlides) currentProgress.completedSlides = completedSlides;
+    }
+    
+    saveLocalProgress(currentProgress);
 
     // Sync to Firestore (non-blocking)
-    writeToFirestore(studentEmail, { currentSlide: slideNumber }).catch(() => {
+    const updates: Partial<StudentDocument> = moduleId
+        ? { progress: { [moduleId]: { currentSlide: slideNumber, completedSlides: completedSlides } } }
+        : { currentSlide: slideNumber };
+        
+    writeToFirestore(studentEmail, updates).catch(() => {
       // Error already handled
     });
   };
@@ -557,12 +644,20 @@ export function LessonProvider({ children }: { children: ReactNode }) {
     setCompletedSlides(newCompleted);
 
     // Update localStorage
-    saveLocalProgress({
-      email: studentEmail,
-      completedSlides: newCompleted,
-      currentSlide: slideNumber,
-      lastSyncedAt: new Date().toISOString(),
-    });
+    const currentProgress = loadLocalProgress(studentEmail) || { email: studentEmail, completedSlides: [] };
+    if (moduleId) {
+        if (!currentProgress.progress) currentProgress.progress = {};
+        currentProgress.progress[moduleId] = {
+            completedSlides: newCompleted,
+            currentSlide: slideNumber,
+            lastSyncedAt: new Date().toISOString()
+        };
+    } else {
+        currentProgress.completedSlides = newCompleted;
+        currentProgress.currentSlide = slideNumber;
+        currentProgress.lastSyncedAt = new Date().toISOString();
+    }
+    saveLocalProgress(currentProgress);
 
     // Sync to Firestore using arrayUnion for atomic append
     const firebase = getFirebaseClient();
@@ -570,17 +665,51 @@ export function LessonProvider({ children }: { children: ReactNode }) {
       setSyncStatus("syncing");
       try {
         const docRef = doc(firebase.db, "students", studentEmail);
-        // Use setDoc with merge + arrayUnion for atomic, idempotent updates
-        await setDoc(
-          docRef,
-          {
-            email: studentEmail,
-            completedSlides: arrayUnion(slideNumber),
-            lastActiveAt: Timestamp.now(),
-            currentSlide: slideNumber,
-          },
-          { merge: true }
-        );
+        
+        let updateData;
+        if (moduleId) {
+            // Important: We cannot use nested arrayUnion easily with setDoc merge for a nested MAP unless we structure it carefully.
+            // Actually, we can just send the whole new array if we trust our local state, OR use dot notation with updateDoc.
+            // But writeToFirestore uses setDoc. 
+            // setDoc with { "progress.moduleId.completedSlides": arrayUnion(slideNumber) } works if the document exists.
+            
+            // To be safe and atomic, we construct the object:
+            // { progress: { [moduleId]: { completedSlides: arrayUnion(slideNumber), currentSlide: ... } } }
+            // This MIGHT overwrite other fields in [moduleId] if we are not careful, but setDoc merge should handle deep merge.
+            // WAIT: setDoc merges fields. If I send { progress: { mid: { slides: ... } } }, it merges 'progress', then 'mid', then 'slides'.
+            // It preserves other keys in 'mid' if they are not in the update.
+            
+            updateData = {
+                email: studentEmail,
+                lastActiveAt: Timestamp.now(),
+                [`progress.${moduleId}.completedSlides`]: arrayUnion(slideNumber),
+                [`progress.${moduleId}.currentSlide`]: slideNumber,
+                // We must use dot notation strings for keys to ensure merge works correctly on nested fields without overwriting siblings?
+                // Actually setDoc with merge:true and a nested object { progress: { [mid]: ... } } performs a recursive merge.
+            };
+            
+            // However, arrayUnion is a sentinel.
+            // Let's use the object structure which is cleaner for setDoc.
+            updateData = {
+                email: studentEmail,
+                lastActiveAt: Timestamp.now(),
+                 progress: {
+                     [moduleId]: {
+                         completedSlides: arrayUnion(slideNumber),
+                         currentSlide: slideNumber
+                     }
+                 }
+            };
+        } else {
+            updateData = {
+                email: studentEmail,
+                completedSlides: arrayUnion(slideNumber),
+                lastActiveAt: Timestamp.now(),
+                currentSlide: slideNumber,
+            };
+        }
+
+        await setDoc(docRef, updateData, { merge: true });
 
         setSyncStatus("synced");
         setSyncError(null);
@@ -595,10 +724,32 @@ export function LessonProvider({ children }: { children: ReactNode }) {
         console.error("❌ Failed to mark slide complete:", error.message);
 
         // Add to retry queue
-        addToRetryQueue(studentEmail, {
-          completedSlides: arrayUnion(slideNumber) as unknown as number[],
-          currentSlide: slideNumber,
-        });
+        // For retry queue, we just blindly serialize what we wanted to send.
+        // But note that arrayUnion doesn't serialize to JSON well for localStorage.
+        // We probably need to convert it to plain arrays for the retry logic if we want persistence across reloads.
+        // PRO TIP: The existing retry logic just stores `data` as Partial<StudentDocument>.
+        // arrayUnion returns a FieldValue, which is an object. JSON.stringify might strip it or mangle it.
+        // For now, I will keep the existing pattern (it was using arrayUnion before too).
+        // If it was working, fine. If not, I won't fix unrelated bugs.
+        
+        let retryData: Partial<StudentDocument> = {};
+        if (moduleId) {
+            retryData = {
+                progress: {
+                    [moduleId]: {
+                        completedSlides: newCompleted, // Fallback to full array for retry if arrayUnion is tricky
+                        currentSlide: slideNumber,
+                    }
+                }
+            };
+        } else {
+            retryData = {
+                completedSlides: newCompleted,
+                currentSlide: slideNumber,
+            };
+        }
+        
+        addToRetryQueue(studentEmail, retryData);
 
         setSyncStatus("error");
         setSyncError(`Failed to save progress: ${error.message}`);
@@ -609,10 +760,23 @@ export function LessonProvider({ children }: { children: ReactNode }) {
       }
     } else {
       // Offline - queue for later
-      addToRetryQueue(studentEmail, {
-        completedSlides: arrayUnion(slideNumber) as unknown as number[],
-        currentSlide: slideNumber,
-      });
+       let retryData: Partial<StudentDocument> = {};
+       if (moduleId) {
+            retryData = {
+                progress: {
+                    [moduleId]: {
+                        completedSlides: newCompleted, 
+                        currentSlide: slideNumber,
+                    }
+                }
+            };
+        } else {
+            retryData = {
+                completedSlides: newCompleted,
+                currentSlide: slideNumber,
+            };
+        }
+      addToRetryQueue(studentEmail, retryData);
     }
   };
 
@@ -654,6 +818,8 @@ export function LessonProvider({ children }: { children: ReactNode }) {
         syncStatus,
         syncError,
         isOnline,
+        moduleId,
+        allProgress,
       }}
     >
       {children}

@@ -9,7 +9,13 @@ import {
 } from "firebase/firestore";
 import { getFirebaseClient } from "../lib/firebase";
 import { Heading, Subheading } from "../components/Typography";
-import type { ConnectionStatus } from "../lib/types/firebase";
+import type { ConnectionStatus, ModuleProgress } from "../lib/types/firebase";
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+import { AVAILABLE_MODULES } from "../constants/modules";
 
 // ============================================================================
 // Constants
@@ -36,9 +42,10 @@ const TOTAL_INTERACTIVE_SLIDES = INTERACTIVE_SLIDE_LIST.length;
 interface StudentData {
   id: string; // email
   email: string;
-  completedSlides: number[];
+  completedSlides: number[]; // legacy fallback
   lastActiveAt?: Timestamp;
-  currentSlide?: number;
+  currentSlide?: number; // legacy fallback
+  progress?: Record<string, ModuleProgress>;
 }
 
 // ============================================================================
@@ -168,11 +175,28 @@ function isStudentActive(lastActiveAt: Timestamp | undefined): boolean {
 /**
  * Single student row in the table
  */
-function StudentRow({ student }: { student: StudentData }) {
-  const completedCount = student.completedSlides?.length || 0;
+function StudentRow({ student, moduleId }: { student: StudentData; moduleId: string }) {
+  // Extract progress for the selected module
+  // Fallback to root level if module not found AND module is "healthy-eating" (legacy support)
+  
+  let completedSlides: number[] = [];
+  let currentSlide = 1;
+
+  if (student.progress?.[moduleId]) {
+      completedSlides = student.progress[moduleId].completedSlides || [];
+      currentSlide = student.progress[moduleId].currentSlide || 1;
+  } else if (moduleId === "healthy-eating") {
+      // Legacy fallback
+      completedSlides = student.completedSlides || [];
+      currentSlide = student.currentSlide || 1;
+  }
+
+  const completedCount = completedSlides.length;
   const progressPercent = Math.round(
     (completedCount / TOTAL_INTERACTIVE_SLIDES) * 100
   );
+  
+  // Use global lastActiveAt for now, as we don't strictly track per-module activity yet in all cases
   const isActive = isStudentActive(student.lastActiveAt);
 
   return (
@@ -230,28 +254,101 @@ function StudentRow({ student }: { student: StudentData }) {
             <ActivityBadge
               key={slide}
               label={label}
-              completed={student.completedSlides?.includes(slide) || false}
+              completed={completedSlides.includes(slide)}
             />
           ))}
         </div>
       </td>
       <td className="px-6 py-4 text-slate-600">
-        Slide {student.currentSlide || 1}
+        Slide {currentSlide}
       </td>
     </tr>
   );
 }
 
 // ============================================================================
-// Main Dashboard Component
+// Auth Components
 // ============================================================================
 
-export default function TeacherDashboard() {
+function LoginForm({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Simple hardcoded check for now as requested
+    // "admin" is the only teacher for now
+    if (email === "admin@endsideout.com" && password === "admin123") {
+        onLogin();
+    } else {
+        setError("Invalid credentials. Please try again.");
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
+        <div className="text-center mb-8">
+            <div className="text-4xl mb-4">🍎</div>
+            <Heading className="text-2xl text-slate-800">Teacher Login</Heading>
+            <Subheading className="text-slate-500">Sign in to view student progress</Subheading>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
+                <input 
+                    type="email" 
+                    required
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    placeholder="admin@endsideout.com"
+                />
+            </div>
+            
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                <input 
+                    type="password" 
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    placeholder="••••••••"
+                />
+            </div>
+            
+            {error && (
+                <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+                    {error}
+                </div>
+            )}
+            
+            <button 
+                type="submit"
+                className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-lg shadow-blue-200"
+            >
+                Sign In
+            </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Dashboard Component (Authenticated)
+// ============================================================================
+
+function DashboardView({ onLogout }: { onLogout: () => void }) {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("disconnected");
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [selectedModule, setSelectedModule] = useState<string>("healthy-eating");
 
   const setupListener = useCallback(() => {
     const firebase = getFirebaseClient();
@@ -283,6 +380,7 @@ export default function TeacherDashboard() {
             completedSlides: docData.completedSlides || [],
             lastActiveAt: docData.lastActiveAt,
             currentSlide: docData.currentSlide,
+            progress: docData.progress,
           });
         });
 
@@ -333,7 +431,7 @@ export default function TeacherDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="mx-auto max-w-5xl">
-        <header className="mb-10 flex items-center justify-between">
+        <header className="mb-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
             <Heading className="text-3xl text-slate-800">
               Teacher Dashboard 🍎
@@ -342,19 +440,44 @@ export default function TeacherDashboard() {
               Track student progress in real-time.
             </Subheading>
           </div>
-          <div className="flex items-center gap-4">
-            {/* Connection Status Badge */}
-            <ConnectionStatusBadge
-              status={connectionStatus}
-              error={connectionError}
-              onRetry={handleRetry}
-            />
-
-            {/* Student count */}
-            <div className="text-xs text-slate-500 font-medium">
-              {students.length} {students.length === 1 ? "student" : "students"}
+          
+          <div className="flex flex-col gap-3 items-end">
+             <div className="flex items-center gap-4">
+                 {/* Logout Button */}
+                 <button 
+                    onClick={onLogout}
+                    className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
+                 >
+                    Logout
+                 </button>
+             </div>
+             {/* Module Selector */}
+            <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-slate-700">Module:</label>
+                <select 
+                    value={selectedModule} 
+                    onChange={(e) => setSelectedModule(e.target.value)}
+                    className="block rounded-lg border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2 px-3 border"
+                >
+                    {AVAILABLE_MODULES.map(m => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                    ))}
+                </select>
             </div>
+          
+            <div className="flex items-center gap-4">
+                {/* Connection Status Badge */}
+                <ConnectionStatusBadge
+                status={connectionStatus}
+                error={connectionError}
+                onRetry={handleRetry}
+                />
 
+                {/* Student count */}
+                <div className="text-xs text-slate-500 font-medium">
+                {students.length} {students.length === 1 ? "student" : "students"}
+                </div>
+            </div>
           </div>
         </header>
 
@@ -377,7 +500,7 @@ export default function TeacherDashboard() {
                 <tr>
                   <th className="px-6 py-4">Student</th>
                   <th className="px-6 py-4">Last Active</th>
-                  <th className="px-6 py-4">Progress</th>
+                  <th className="px-6 py-4">Progress ({AVAILABLE_MODULES.find(m => m.id === selectedModule)?.label.split(' ')[0]})</th>
                   <th className="px-6 py-4">Completed Activities</th>
                   <th className="px-6 py-4">Current Slide</th>
                 </tr>
@@ -394,7 +517,7 @@ export default function TeacherDashboard() {
                   </tr>
                 ) : (
                   students.map((student) => (
-                    <StudentRow key={student.id} student={student} />
+                    <StudentRow key={student.id} student={student} moduleId={selectedModule} />
                   ))
                 )}
               </tbody>
@@ -404,4 +527,35 @@ export default function TeacherDashboard() {
       </div>
     </div>
   );
+}
+
+// ============================================================================
+// Main Page Component
+// ============================================================================
+
+export default function TeacherPage() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    useEffect(() => {
+        const auth = sessionStorage.getItem("teacher_auth") === "true";
+        if (auth) {
+            setIsAuthenticated(true);
+        }
+    }, []);
+    
+    const handleLogin = () => {
+        setIsAuthenticated(true);
+        sessionStorage.setItem("teacher_auth", "true");
+    };
+
+    const handleLogout = () => {
+        setIsAuthenticated(false);
+        sessionStorage.removeItem("teacher_auth");
+    };
+    
+    if (!isAuthenticated) {
+        return <LoginForm onLogin={handleLogin} />;
+    }
+    
+    return <DashboardView onLogout={handleLogout} />;
 }

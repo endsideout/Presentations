@@ -23,15 +23,26 @@ export interface RetryQueueItem {
   lastAttemptAt?: number;
 }
 
+export interface ModuleProgress {
+  completedSlides: number[];
+  currentSlide: number;
+  lastActiveAt?: Timestamp;
+}
+
 /**
  * Student document structure in Firestore
  */
 export interface StudentDocument {
   email: string;
-  completedSlides: number[];
+  /** Legacy: flattened progress for the original single-module lesson */
+  completedSlides?: number[];
   /** Optional - may not exist on first write or for older documents */
   lastActiveAt?: Timestamp;
+  /** Legacy: flattened current slide */
   currentSlide?: number;
+
+  /** New: Multi-module progress map */
+  progress?: Record<string, ModuleProgress>;
 }
 
 /**
@@ -43,6 +54,12 @@ export interface LocalProgress {
   currentSlide?: number;
   /** ISO timestamp of last sync with Firestore */
   lastSyncedAt?: string;
+  /** Multi-module progress map */
+  progress?: Record<string, {
+    completedSlides: number[];
+    currentSlide: number;
+    lastSyncedAt?: string;
+  }>;
 }
 
 /**
@@ -53,10 +70,9 @@ export function isStudentDocument(data: unknown): data is StudentDocument {
 
   const doc = data as Record<string, unknown>;
   return (
-    typeof doc.email === "string" &&
-    Array.isArray(doc.completedSlides) &&
-    doc.completedSlides.every((slide: unknown) => typeof slide === "number")
-    // lastActiveAt is now optional, so we don't check for it
+    typeof doc.email === "string"
+    // Loosened checks because completedSlides is now optional if progress exists, 
+    // but in practice we expect at least email.
   );
 }
 
@@ -67,9 +83,5 @@ export function isLocalProgress(data: unknown): data is LocalProgress {
   if (typeof data !== "object" || data === null) return false;
 
   const doc = data as Record<string, unknown>;
-  return (
-    typeof doc.email === "string" &&
-    Array.isArray(doc.completedSlides) &&
-    doc.completedSlides.every((slide: unknown) => typeof slide === "number")
-  );
+  return typeof doc.email === "string";
 }
