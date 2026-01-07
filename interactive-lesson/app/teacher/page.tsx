@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   collection,
+  doc,
+  getDoc,
   onSnapshot,
   Timestamp,
   Unsubscribe,
@@ -46,6 +48,7 @@ interface StudentData {
   lastActiveAt?: Timestamp;
   currentSlide?: number; // legacy fallback
   progress?: Record<string, ModuleProgress>;
+  classId?: string;
 }
 
 // ============================================================================
@@ -215,6 +218,11 @@ function StudentRow({ student, moduleId }: { student: StudentData; moduleId: str
               {student.id.split("@")[0]}
             </div>
             <div className="text-xs text-slate-400">{student.email}</div>
+            {student.classId && (
+                <div className="text-xs font-semibold text-indigo-600 mt-0.5">
+                    Class: {student.classId}
+                </div>
+            )}
           </div>
         </div>
       </td>
@@ -275,15 +283,33 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple hardcoded check for now as requested
-    // "admin" is the only teacher for now
-    if (email === "admin@endsideout.com" && password === "admin123") {
-        onLogin();
-    } else {
-        setError("Invalid credentials. Please try again.");
+    setError("");
+    
+    // Check against teachers collection in Firestore
+    const db = getFirebaseClient()?.db;
+    
+    if (db) {
+        try {
+            const teacherDoc = await getDoc(doc(db, "teachers", email));
+            if (teacherDoc.exists()) {
+                const data = teacherDoc.data();
+                // TODO: Use better auth in production (Firebase Auth)
+                if (data.password === password) {
+                     onLogin();
+                     return;
+                }
+            }
+        } catch (err) {
+            console.error("Login error during Firestore check:", err);
+            // Continue to fallback logic (which is now just error)
+        }
     }
+    
+    setError("Invalid credentials. Please try again.");
   };
 
   return (
@@ -349,6 +375,7 @@ function DashboardView({ onLogout }: { onLogout: () => void }) {
     useState<ConnectionStatus>("disconnected");
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [selectedModule, setSelectedModule] = useState<string>("healthy-eating");
+  const [selectedClass, setSelectedClass] = useState<string>("all");
 
   const setupListener = useCallback(() => {
     const firebase = getFirebaseClient();
@@ -411,6 +438,21 @@ function DashboardView({ onLogout }: { onLogout: () => void }) {
 
     return unsubscribe;
   }, []);
+  
+  // Extract unique classes from students
+  const availableClasses = useMemo(() => {
+      const classes = new Set<string>();
+      students.forEach(s => {
+          if (s.classId) classes.add(s.classId);
+      });
+      return Array.from(classes).sort();
+  }, [students]);
+
+  // Filter students by class
+  const filteredStudents = useMemo(() => {
+      if (selectedClass === "all") return students;
+      return students.filter(s => s.classId === selectedClass);
+  }, [students, selectedClass]);
 
   useEffect(() => {
     const unsubscribe = setupListener();
@@ -475,9 +517,26 @@ function DashboardView({ onLogout }: { onLogout: () => void }) {
 
                 {/* Student count */}
                 <div className="text-xs text-slate-500 font-medium">
-                {students.length} {students.length === 1 ? "student" : "students"}
+                {filteredStudents.length} {filteredStudents.length === 1 ? "student" : "students"}
                 </div>
             </div>
+            
+             {/* Class Selector (only show if classes exist) */}
+             {availableClasses.length > 0 && (
+                <div className="flex items-center gap-2 mt-2 md:mt-0">
+                    <label className="text-xs font-semibold uppercase text-slate-500">Filter Class:</label>
+                    <select 
+                        value={selectedClass} 
+                        onChange={(e) => setSelectedClass(e.target.value)}
+                        className="block rounded-lg border-gray-300 bg-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs py-1.5 px-2.5 border"
+                    >
+                        <option value="all">All Classes</option>
+                        {availableClasses.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
           </div>
         </header>
 
@@ -516,7 +575,7 @@ function DashboardView({ onLogout }: { onLogout: () => void }) {
                     </td>
                   </tr>
                 ) : (
-                  students.map((student) => (
+                  filteredStudents.map((student) => (
                     <StudentRow key={student.id} student={student} moduleId={selectedModule} />
                   ))
                 )}

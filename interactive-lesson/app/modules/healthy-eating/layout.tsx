@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { SlideNavigation } from "../../components/SlideNavigation";
 import { SlideTracker } from "../../components/SlideTracker";
 import { SyncStatusIndicator } from "../../components/SyncStatusIndicator";
@@ -16,12 +17,14 @@ export default function StudentLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <LessonProvider moduleId="healthy-eating">
-      <SlideTracker />
-      <SlideNavigation />
-      <SyncStatusIndicator />
-      {children}
-    </LessonProvider>
+    <Suspense fallback={null}>
+      <LessonProvider moduleId="healthy-eating">
+        <SlideTracker />
+        <SlideNavigation />
+        <SyncStatusIndicator />
+        {children}
+      </LessonProvider>
+    </Suspense>
   );
 }
 

@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // TEACHERS COLLECTION
+    // Allowed: Public Read (Required for client-side password check)
+    // Allowed: Public Write (Temporarily enabled for Dev/Seeding)
+    match /teachers/{teacherId} {
+      allow read, write: if true;
+    }
+    
+    // STUDENTS COLLECTION
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+  }
+}

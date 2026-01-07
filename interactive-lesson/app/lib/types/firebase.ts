@@ -43,6 +43,9 @@ export interface StudentDocument {
 
   /** New: Multi-module progress map */
   progress?: Record<string, ModuleProgress>;
+
+  /** Class Identifier */
+  classId?: string;
 }
 
 /**

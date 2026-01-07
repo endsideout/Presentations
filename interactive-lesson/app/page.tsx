@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { Heading, Subheading } from "./components/Typography";
 import { AVAILABLE_MODULES } from "./constants/modules";
@@ -195,9 +195,11 @@ export default function Home() {
           </Subheading>
         </div>
 
-        <LessonProvider>
-            <ModuleGrid />
-        </LessonProvider>
+        <Suspense fallback={null}>
+          <LessonProvider>
+              <ModuleGrid />
+          </LessonProvider>
+        </Suspense>
       </main>
     </div>
   );

@@ -192,25 +192,7 @@ export function LessonProvider({
   // URL Auth Integration
   const searchParams = useSearchParams();
 
-  // Check for email in URL on mount/update
-  useEffect(() => {
-    if (!searchParams) return;
-    
-    // Support "email" or "student_email" param
-    const emailParam =
-      searchParams.get("email") || searchParams.get("student_email");
 
-    if (emailParam && emailParam.includes("@")) {
-      // If we have a valid email in URL, override/set current session
-      // Only set if different to avoid loops
-      if (emailParam !== studentEmail) {
-        if (process.env.NODE_ENV === "development") {
-            console.log(`🔗 Detected email from URL: ${emailParam}`);
-        }
-        setStudentEmail(emailParam);
-      }
-    }
-  }, [searchParams, studentEmail]); // Dependencies correct
 
   /**
    * Load retry queue from localStorage
@@ -502,6 +484,39 @@ export function LessonProvider({
     [isOnline, addToRetryQueue, processRetryQueue]
   );
 
+  // Check for email and class in URL on mount/update
+  useEffect(() => {
+    if (!searchParams) return;
+    
+    // Support "email" or "student_email" param
+    const emailParam =
+      searchParams.get("email") || searchParams.get("student_email");
+      
+    // Support "class" or "classId" param
+    const classParam =
+      searchParams.get("class") || searchParams.get("classId");
+
+    if (emailParam && emailParam.includes("@")) {
+      // If we have a valid email in URL, override/set current session
+      // Only set if different to avoid loops
+      if (emailParam !== studentEmail) {
+        if (process.env.NODE_ENV === "development") {
+            console.log(`🔗 Detected email from URL: ${emailParam}`);
+        }
+        setStudentEmail(emailParam);
+        
+        // If we also have a class param, update it immediately
+        if (classParam) {
+            writeToFirestore(emailParam, { classId: classParam }).catch(console.error);
+        }
+      } else if (classParam) {
+          // Email matches current, but maybe class is new?
+          // We can just blindly update it, writeToFirestore handles merges
+           writeToFirestore(emailParam, { classId: classParam }).catch(console.error);
+      }
+    }
+  }, [searchParams, studentEmail, writeToFirestore]);
+
   // Online/offline event listeners
   useEffect(() => {
     const handleOnline = () => {
@@ -520,6 +535,8 @@ export function LessonProvider({
         subscribeToProgress(studentEmail);
       }
     };
+
+
 
     const handleOffline = () => {
       setIsOnline(false);
