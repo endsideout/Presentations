@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { Heading, Subheading } from "./components/Typography";
+
 import { AVAILABLE_MODULES } from "./constants/modules";
 import { LessonProvider, useLesson } from "./context/LessonContext";
 import { LoginModal } from "./components/LoginModal";
@@ -133,6 +134,17 @@ function ModuleGrid() {
                 </div>
                 </Link>
             )})}
+            
+            {/* 3D Wellness Tracker */}
+            <Link href="/wellness" className="cursor-pointer group relative bg-white rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-slate-100 overflow-hidden flex flex-col items-center justify-center min-h-[200px]">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative z-10 text-center">
+                    <div className="text-5xl mb-4">🪐</div>
+                    <h2 className="text-2xl font-bold text-slate-800 break-words">
+                        3D Wellness Tracker
+                    </h2>
+                </div>
+            </Link>
             
             {/* Teacher Dashboard Link */}
                 <Link
