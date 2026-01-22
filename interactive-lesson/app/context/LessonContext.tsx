@@ -8,6 +8,7 @@ import {
   useCallback,
   useRef,
   ReactNode,
+  Suspense,
 } from "react";
 import { getFirebaseClient } from "../lib/firebase";
 import {
@@ -154,6 +155,57 @@ function generateRetryId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// Component that reads search params (must be wrapped in Suspense)
+function SearchParamsHandler({
+  studentEmail,
+  setStudentEmail,
+  writeToFirestore,
+}: {
+  studentEmail: string | null;
+  setStudentEmail: (email: string) => Promise<void>;
+  writeToFirestore: (
+    email: string,
+    updates: Partial<Omit<StudentDocument, "email">>
+  ) => Promise<boolean>;
+}) {
+  const searchParams = useSearchParams();
+
+  // Check for email and class in URL on mount/update
+  useEffect(() => {
+    if (!searchParams) return;
+    
+    // Support "email" or "student_email" param
+    const emailParam =
+      searchParams.get("email") || searchParams.get("student_email");
+      
+    // Support "class" or "classId" param
+    const classParam =
+      searchParams.get("class") || searchParams.get("classId");
+
+    if (emailParam && emailParam.includes("@")) {
+      // If we have a valid email in URL, override/set current session
+      // Only set if different to avoid loops
+      if (emailParam !== studentEmail) {
+        if (process.env.NODE_ENV === "development") {
+            console.log(`🔗 Detected email from URL: ${emailParam}`);
+        }
+        setStudentEmail(emailParam);
+        
+        // If we also have a class param, update it immediately
+        if (classParam) {
+            writeToFirestore(emailParam, { classId: classParam }).catch(console.error);
+        }
+      } else if (classParam) {
+          // Email matches current, but maybe class is new?
+          // We can just blindly update it, writeToFirestore handles merges
+           writeToFirestore(emailParam, { classId: classParam }).catch(console.error);
+      }
+    }
+  }, [searchParams, studentEmail, setStudentEmail, writeToFirestore]);
+
+  return null;
+}
+
 export function LessonProvider({ 
   children,
   moduleId 
@@ -188,9 +240,6 @@ export function LessonProvider({
   // Retry queue for failed writes
   const retryQueueRef = useRef<RetryQueueItem[]>([]);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // URL Auth Integration
-  const searchParams = useSearchParams();
 
 
 
@@ -484,38 +533,6 @@ export function LessonProvider({
     [isOnline, addToRetryQueue, processRetryQueue]
   );
 
-  // Check for email and class in URL on mount/update
-  useEffect(() => {
-    if (!searchParams) return;
-    
-    // Support "email" or "student_email" param
-    const emailParam =
-      searchParams.get("email") || searchParams.get("student_email");
-      
-    // Support "class" or "classId" param
-    const classParam =
-      searchParams.get("class") || searchParams.get("classId");
-
-    if (emailParam && emailParam.includes("@")) {
-      // If we have a valid email in URL, override/set current session
-      // Only set if different to avoid loops
-      if (emailParam !== studentEmail) {
-        if (process.env.NODE_ENV === "development") {
-            console.log(`🔗 Detected email from URL: ${emailParam}`);
-        }
-        setStudentEmail(emailParam);
-        
-        // If we also have a class param, update it immediately
-        if (classParam) {
-            writeToFirestore(emailParam, { classId: classParam }).catch(console.error);
-        }
-      } else if (classParam) {
-          // Email matches current, but maybe class is new?
-          // We can just blindly update it, writeToFirestore handles merges
-           writeToFirestore(emailParam, { classId: classParam }).catch(console.error);
-      }
-    }
-  }, [searchParams, studentEmail, writeToFirestore]);
 
   // Online/offline event listeners
   useEffect(() => {
@@ -839,6 +856,13 @@ export function LessonProvider({
         allProgress,
       }}
     >
+      <Suspense fallback={null}>
+        <SearchParamsHandler
+          studentEmail={studentEmail}
+          setStudentEmail={setStudentEmail}
+          writeToFirestore={writeToFirestore}
+        />
+      </Suspense>
       {children}
     </LessonContext.Provider>
   );
