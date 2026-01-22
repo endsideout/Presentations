@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import { SocialWellbeingPostSurvey } from "./SocialWellbeingPostSurvey";
 
 export function WellnessTracker3D() {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -99,3 +100,6 @@ export function WellnessTracker3D() {
     </div>
   );
 }
+
+// Social Wellbeing Component - Active Missions
+export { SocialWellbeingPostSurvey };

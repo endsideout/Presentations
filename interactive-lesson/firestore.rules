@@ -3,15 +3,27 @@ service cloud.firestore {
   match /databases/{database}/documents {
   
     // TEACHERS COLLECTION
-    // Allowed: Public Read (Required for client-side password check)
-    // Allowed: Public Write (Temporarily enabled for Dev/Seeding)
+    // Allowed: Public Read (Required for client-side password check in this prototype)
+    // Denied: Write (Manage via Firebase Console only)
     match /teachers/{teacherId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if false;
     }
     
     // STUDENTS COLLECTION
+    // Allowed: Public Read/Write (Currently permissive for prototype/demo)
+    // In production, lock this down to owner-only write and teacher-only read.
     match /students/{studentId} {
       allow read, write: if true;
+    }
+    
+    // WELLNESS QUESTS COLLECTION
+    // Allowed: Public Read (Students need to see available quests)
+    // Allowed: Public Write (Teachers need to create/edit/delete quests in prototype)
+    // In production, restrict write to authenticated teachers only.
+    match /wellness_quests/{questId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }

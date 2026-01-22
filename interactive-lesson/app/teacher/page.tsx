@@ -18,6 +18,8 @@ import type { ConnectionStatus, ModuleProgress } from "../lib/types/firebase";
 // ============================================================================
 
 import { AVAILABLE_MODULES } from "../constants/modules";
+import { WellnessTeacherView } from "./components/WellnessTeacherView";
+import { WellnessQuestManager } from "./components/WellnessQuestManager";
 
 // ============================================================================
 // Constants
@@ -589,8 +591,96 @@ function DashboardView({ onLogout }: { onLogout: () => void }) {
 }
 
 // ============================================================================
-// Main Page Component
+// Main Page Component with Tabs
 // ============================================================================
+
+function TeacherDashboardWithTabs({ onLogout }: { onLogout: () => void }) {
+  const [activeTab, setActiveTab] = useState<"modules" | "wellness" | "quests">("modules");
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-[family-name:var(--font-geist-sans)]">
+      {/* Tab Navigation */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-8">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setActiveTab("modules")}
+              className={`px-6 py-4 font-semibold text-sm transition-colors relative ${
+                activeTab === "modules"
+                  ? "text-indigo-600"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Module Progress
+              {activeTab === "modules" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("wellness")}
+              className={`px-6 py-4 font-semibold text-sm transition-colors relative ${
+                activeTab === "wellness"
+                  ? "text-indigo-600"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Wellness Progress
+              {activeTab === "wellness" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600"></div>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("quests")}
+              className={`px-6 py-4 font-semibold text-sm transition-colors relative ${
+                activeTab === "quests"
+                  ? "text-indigo-600"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Manage Quests
+              {activeTab === "quests" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600"></div>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === "modules" ? (
+        <DashboardView onLogout={onLogout} />
+      ) : activeTab === "wellness" ? (
+        <div>
+          <div className="p-8">
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={onLogout}
+                className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+          <WellnessTeacherView />
+        </div>
+      ) : (
+        <div>
+          <div className="p-8">
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={onLogout}
+                className="text-sm text-red-600 hover:text-red-700 font-medium px-4 py-2 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+          <WellnessQuestManager />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TeacherPage() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -616,5 +706,5 @@ export default function TeacherPage() {
         return <LoginForm onLogin={handleLogin} />;
     }
     
-    return <DashboardView onLogout={handleLogout} />;
+    return <TeacherDashboardWithTabs onLogout={handleLogout} />;
 }

@@ -30,6 +30,21 @@ export interface ModuleProgress {
 }
 
 /**
+ * Wellness data structure for students
+ */
+export interface WellnessData {
+  totalPoints: number;
+  dimensions: Record<string, {
+    progress: number;
+    points: number;
+  }>;
+  completedQuests: number[];
+  earnedBadgeIndices: number[];
+  streakDays: number;
+  lastActiveAt?: Timestamp;
+}
+
+/**
  * Student document structure in Firestore
  */
 export interface StudentDocument {
@@ -46,6 +61,9 @@ export interface StudentDocument {
 
   /** Class Identifier */
   classId?: string;
+
+  /** Wellness tracking data */
+  wellness?: WellnessData;
 }
 
 /**
