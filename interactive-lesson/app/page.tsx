@@ -4,7 +4,7 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { Heading, Subheading } from "./components/Typography";
 
-import { AVAILABLE_MODULES } from "./constants/modules";
+import { AVAILABLE_MODULES, KYH_MODULE } from "./constants/modules";
 import { LessonProvider, useLesson } from "./context/LessonContext";
 import { LoginModal } from "./components/LoginModal";
 import { useRouter } from "next/navigation";
@@ -135,6 +135,34 @@ function ModuleGrid() {
                 </Link>
             )})}
             
+            {/* Know Your Health (KYH) */}
+            <Link
+                href={KYH_MODULE.path}
+                className="group relative bg-white rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-slate-100 overflow-hidden flex flex-col"
+            >
+                <div className="absolute inset-0 bg-gradient-to-br from-green-50 to-lime-50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative z-10 flex-1">
+                    <div className="flex justify-between items-start mb-6">
+                        <div className="text-4xl">🩺</div>
+                        <div className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                            Recap
+                        </div>
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-3 group-hover:text-green-600 transition-colors">
+                        Know Your Health
+                    </h2>
+                    <p className="text-slate-500 leading-relaxed mb-8">
+                        {KYH_MODULE.description}
+                    </p>
+                </div>
+                <div className="relative z-10 mt-auto flex items-center text-green-600 font-semibold group-hover:gap-2 transition-all">
+                    Start Recap
+                    <svg className="w-5 h-5 ml-2 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                </div>
+            </Link>
+
             {/* 3D Wellness Tracker */}
             <Link href="/wellness" className="cursor-pointer group relative bg-white rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-slate-100 overflow-hidden flex flex-col items-center justify-center min-h-[200px]">
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity" />

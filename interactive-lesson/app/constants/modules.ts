@@ -12,3 +12,10 @@ export const AVAILABLE_MODULES = [
         path: "/modules/math-basics"
     },
 ] as const;
+
+export const KYH_MODULE = {
+    id: "kyh",
+    label: "Know Your Health 🩺",
+    description: "Review and recap what you've learned in each module with fun activities and earn points!",
+    path: "/modules/kyh"
+} as const;
